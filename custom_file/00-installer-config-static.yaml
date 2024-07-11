@@ -1,0 +1,7 @@
+# This is the network config written by 'subiquity'
+network:
+        version: 2
+        renderer: NetworkManager
+        ethernets:
+                eth0:
+                        addresses: [192.168.191.6/24]
