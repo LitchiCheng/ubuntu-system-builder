@@ -32,37 +32,52 @@ function downloadBase()
 
 function cleanup() {
 	set +e
-	pushd "${rootfs_folder}" > /dev/null 2>&1
-
 	for attempt in $(seq 10); do
-		mount | grep -q "${rootfs_folder}/sys" && umount ./sys
-		mount | grep -q "${rootfs_folder}/proc" && umount ./proc
-		mount | grep -q "${rootfs_folder}/dev" && umount ./dev
-        mount | grep -q "${rootfs_folder}/dev/pts" && umount ./dev/pts
+		mount | grep -q "${rootfs_folder}/sys" && umount ${rootfs_folder}/sys
+		mount | grep -q "${rootfs_folder}/proc" && umount ${rootfs_folder}/proc
+		mount | grep -q "${rootfs_folder}/dev" && umount ${rootfs_folder}/dev
+        mount | grep -q "${rootfs_folder}/dev/pts" && umount .${rootfs_folder}/dev/pts
 		mount | grep -q "${rootfs_folder}"
 		if [ $? -ne 0 ]; then
 			break
 		fi
 		sleep 1
 	done
-	popd > /dev/null
 }
 trap cleanup EXIT
 
+function mountRootfs()
+{
+    mount /sys ${rootfs_folder}/sys -o bind
+	mount /proc ${rootfs_folder}/proc -o bind
+	mount /dev ${rootfs_folder}/dev -o bind
+    mount /dev/pts ${rootfs_folder}/dev/pts -o bind
+}
+
+function umountRootfs () {
+    umount ${rootfs_folder}/sys
+	umount ${rootfs_folder}/proc
+	umount ${rootfs_folder}/dev/pts
+	umount ${rootfs_folder}/dev
+
+    rm -rf ${rootfs_folder}/var/lib/apt/lists/*
+	rm -rf ${rootfs_folder}/dev/*
+	rm -rf ${rootfs_folder}/var/log/*
+	rm -rf ${rootfs_folder}/var/cache/apt/archives/*.deb
+	rm -rf ${rootfs_folder}/var/tmp/*
+	rm -rf ${rootfs_folder}/tmp/*
+}
+
+
 function userCustomize(){
-    pushd "${rootfs_folder}" > /dev/null 2>&1
-	# cp "/usr/bin/qemu-aarch64-static" "usr/bin/"
-	# chmod 755 "usr/bin/qemu-aarch64-static"
-	mount /sys ./sys -o bind
-	mount /proc ./proc -o bind
-	mount /dev ./dev -o bind
-    mount /dev/pts ./dev/pts -o bind
+    mountRootfs
+
     # instead apt sources
-	LC_ALL=C chroot . mv /etc/apt/sources.list /etc/apt/sources.list_bak
+	LC_ALL=C chroot ${rootfs_folder} mv /etc/apt/sources.list /etc/apt/sources.list_bak
     cp -rf "${custom_sources_list}" "${rootfs_folder}"/etc/apt/
     # apt update
     set +e
-    LC_ALL=C chroot . apt update || true
+    LC_ALL=C chroot ${rootfs_folder} apt update || true
     set -e
     # update package 
     echo "apt install package list"
@@ -70,8 +85,8 @@ function userCustomize(){
     	if [ ! -z "${package_list}" ]; then
         set +e
         #--no-install-recommends
-        sudo LC_ALL=C DEBIAN_FRONTEND=noninteractive chroot . apt -y --fix-broken install
-		sudo LC_ALL=C DEBIAN_FRONTEND=noninteractive chroot . apt-get -y install ${package_list}
+        sudo LC_ALL=C DEBIAN_FRONTEND=noninteractive chroot ${rootfs_folder} apt -y --fix-broken install
+		sudo LC_ALL=C DEBIAN_FRONTEND=noninteractive chroot ${rootfs_folder} apt-get -y install ${package_list}
         set -e
 	else
 		echo "ERROR: Package list is empty"
@@ -80,31 +95,20 @@ function userCustomize(){
     cp -rf "${custom_netconfig}" "${rootfs_folder}"/etc/netplan/
     # set timezone
     sudo rm -rf "${rootfs_folder}"/etc/localtime 
-    LC_ALL=C chroot . ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+    LC_ALL=C chroot ${rootfs_folder} ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
     # add user 
-    LC_ALL=C chroot . useradd -s '/bin/bash' -m -G adm,sudo ${user_name}
-    LC_ALL=C chroot . echo "${user_name}:${user_passwd}" | chpasswd
+    LC_ALL=C chroot ${rootfs_folder} useradd -s '/bin/bash' -m -G adm,sudo ${user_name} || true
+    LC_ALL=C chroot ${rootfs_folder} echo "${user_name}:${user_passwd}" | chpasswd
     # fstab
-    sudo echo "/nfsroot/etc/fstab /dev/nfs       /               nfs    defaults          1       1" > ${rootfs_folder}/etc/fstab
+    sudo echo "/dev/nfs       /               nfs    defaults          1       1" > ${rootfs_folder}/etc/fstab
     # add service for startup
-    sudo cp -rf $custom_file_dir/usr_config.sh ${rootfs_folder}/etc/startup/
+    sudo cp -rf $custom_file_dir/usr_config.sh ${rootfs_folder}/etc/
     sudo cp -rf $custom_file_dir/usr_config.service ${rootfs_folder}/etc/systemd/system/
-    LC_ALL=C chroot . systemctl enable usr_config.service
+    LC_ALL=C chroot ${rootfs_folder} systemctl enable usr_config.service
 
-    umount ./sys
-	umount ./proc
-	umount ./dev/pts
-	umount ./dev
-    rm -rf var/lib/apt/lists/*
-	rm -rf dev/*
-	rm -rf var/log/*
-	rm -rf var/cache/apt/archives/*.deb
-	rm -rf var/tmp/*
-	rm -rf tmp/*
-
-    popd > /dev/null
+    umountRootfs
 }
 
-precheck
-downloadBase
+# precheck
+# downloadBase
 userCustomize

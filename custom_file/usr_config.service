@@ -1,10 +1,10 @@
 [Unit]
 Description=/etc/systemd/system/usr_config.service Compatibility
-ConditionPathExists=/etc/startup/usr_config.sh
+ConditionPathExists=/etc/usr_config.sh
 
 [Service]
 Type=simple
-ExecStart=/etc/startup/usr_config.sh
+ExecStart=/etc/usr_config.sh
 ExecStop=
 #TimeoutSec=0
 TimeoutStartSec=6

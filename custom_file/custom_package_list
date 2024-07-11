@@ -35,4 +35,7 @@ linuxptp
 ntpdate
 python3-pip
 busybox
+stress-ng
+iperf3
+git
 
