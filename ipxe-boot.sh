@@ -6,12 +6,12 @@ IP_ADDRESS="192.168.2.2"
 GATEWAY="192.168.2.1"
 DHCP_START="192.168.2.3"
 DHCP_END="192.168.2.20"
-DISTRIBUTION_VERSION="18.04"
+DISTRIBUTION_VERSION="20.04"
 DISTRIBUTION_MIN_VERSION="6"
 DISTRIBUTION_TYPE="desktop" # live-server
 ROOTFS_NAME="ubuntu-$DISTRIBUTION_VERSION.$DISTRIBUTION_MIN_VERSION-$DISTRIBUTION_TYPE-amd64"
 IMAGE_URL="https://mirrors.tuna.tsinghua.edu.cn/ubuntu-releases/$DISTRIBUTION_VERSION/$ROOTFS_NAME.iso"
-ROOTFS_PATH="/home/litchi/$ROOTFS_NAME.iso"
+ROOTFS_PATH="/home/dar/$ROOTFS_NAME.iso"
 BOOT_OPTION_TIMEOUT="5000"
 
 function configServerIp () {
@@ -110,7 +110,7 @@ function deployRootfs()
         echo "end download image $IMAGE_URL"
     fi
 
-    cat $ROOTFS_PATH
+    echo $ROOTFS_PATH
     mount -o loop $ROOTFS_PATH /mnt
     mkdir -pv /pxeboot/os-images/$ROOTFS_NAME
     rsync -avz /mnt/ /pxeboot/os-images/$ROOTFS_NAME/
@@ -122,7 +122,7 @@ function configPxeboot()
 cat <<EOF > /pxeboot/config/boot.ipxe
 #!ipxe
 
-set server_ip  192.168.2.2
+set server_ip  $IP_ADDRESS
 
 set root_path  /pxeboot
 
@@ -130,20 +130,27 @@ menu Select an OS to boot
 
 item $ROOTFS_NAME        Install $ROOTFS_NAME
 
-choose --default exit --timeout $BOOT_OPTION_TIMEOUT option && goto ${option}
+choose --default exit --timeout $BOOT_OPTION_TIMEOUT option && goto \${option}
 
 :$ROOTFS_NAME
 
 set os_root os-images/$ROOTFS_NAME
 
-kernel tftp://${server_ip}/${os_root}/casper/vmlinuz
+kernel tftp://${IP_ADDRESS}/os-images/$ROOTFS_NAME/casper/vmlinuz
 
-initrd tftp://${server_ip}/${os_root}/casper/initrd
+initrd tftp://${IP_ADDRESS}/os-images/$ROOTFS_NAME/casper/initrd
 
-imgargs vmlinuz initrd=initrd boot=casper maybe-ubiquity netboot=nfs ip=dhcp nfsroot=${server_ip}:${root_path}/${os_root} quiet splash ---
+imgargs vmlinuz initrd=initrd boot=casper maybe-ubiquity netboot=nfs ip=dhcp nfsroot=${IP_ADDRESS}:/pxeboot/os-images/$ROOTFS_NAME quiet splash ---
 
 boot
 EOF
+}
+
+function clean()
+{
+    rm -rf /etc/netplan/50-$INTERFACE-init.yaml
+    rm -rf /pxeboot
+    sudo systemctl disable dnsmasq
 }
 
 configServerIp
