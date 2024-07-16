@@ -3,16 +3,20 @@
 current_dir=$(cd $(dirname $0); pwd)
 script_name="$(basename "${0}")"
 custom_file_dir="${current_dir}/custom_file"
+boot_file_dir="${current_dir}/boot"
 custom_sources_list="${custom_file_dir}/sources.list"
 custom_package_list="${custom_file_dir}/custom_package_list"
 custom_netconfig="${custom_file_dir}/00-installer-config-static.yaml"
 user_name="dar"
-user_passwd="."
+user_passwd="dar"
+
 
 distrubution="focal"
 mirrors_url="http://mirrors.ustc.edu.cn/ubuntu/"
 arch="amd64"
-rootfs_folder="${current_dir}/linux-rootfs"
+nfs_or_sda="nfs"
+# rootfs_folder="${current_dir}/linux-rootfs"
+rootfs_folder="/pxeboot/os-images/test-rootfs"
 
 function precheck()
 {
@@ -96,19 +100,45 @@ function userCustomize(){
     # set timezone
     sudo rm -rf "${rootfs_folder}"/etc/localtime 
     LC_ALL=C chroot ${rootfs_folder} ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+    # set locale
+    LC_ALL=C chroot ${rootfs_folder} echo "LANG=en_US.UTF-8" > /etc/locale.conf
     # add user 
     LC_ALL=C chroot ${rootfs_folder} useradd -s '/bin/bash' -m -G adm,sudo ${user_name} || true
-    LC_ALL=C chroot ${rootfs_folder} echo "${user_name}:${user_passwd}" | chpasswd
+    LC_ALL=C chroot ${rootfs_folder} echo "$user_name:$user_passwd" | chpasswd
+
+    if [[ "${nfs_or_sda}" == "nfs" ]]; then
     # fstab
-    sudo echo "/dev/nfs       /               nfs    defaults          1       1" > ${rootfs_folder}/etc/fstab
+cat << EOF > ${rootfs_folder}/etc/fstab
+/dev/nfs         /               nfs    defaults          1       1
+tmpfs            /tmp            tmpfs   defaults        0       0
+proc             /proc           proc    defaults        0       0
+devpts           /dev/pts             devpts     mode=0620,ptmxmode=0666,gid=5      0  0
+tmpfs            /run                 tmpfs      mode=0755,nodev,nosuid,strictatime 0  0
+tmpfs            /var/volatile        tmpfs      defaults              0  0
+EOF
+    else
+cat << EOF > ${rootfs_folder}/etc/fstab
+/dev/sda1         /               auto    defaults          1       1
+tmpfs            /tmp            tmpfs   defaults        0       0
+proc             /proc           proc    defaults        0       0
+devpts           /dev/pts             devpts     mode=0620,ptmxmode=0666,gid=5      0  0
+tmpfs            /run                 tmpfs      mode=0755,nodev,nosuid,strictatime 0  0
+tmpfs            /var/volatile        tmpfs      defaults              0  0
+EOF
+    fi
+
     # add service for startup
     sudo cp -rf $custom_file_dir/usr_config.sh ${rootfs_folder}/etc/
     sudo cp -rf $custom_file_dir/usr_config.service ${rootfs_folder}/etc/systemd/system/
     LC_ALL=C chroot ${rootfs_folder} systemctl enable usr_config.service
 
+    LC_ALL=C chroot ${rootfs_folder} systemctl disable NetworkManager-wait-online.service
+
     umountRootfs
+
+    sudo cp -rpx $boot_file_dir/* ${rootfs_folder}/boot/
 }
 
-# precheck
-# downloadBase
+precheck
+downloadBase
 userCustomize
