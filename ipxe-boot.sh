@@ -46,6 +46,8 @@ function compileIpxe()
     mkdir /tmp/ipxe    
     git clone https://github.com/ipxe/ipxe.git /tmp/ipxe
     
+    sudo apt-get install zlib1g-dev liblzma-dev -y
+
 cat <<EOF > /tmp/ipxe/src/bootconfig.ipxe
 #!ipxe
 dhcp
